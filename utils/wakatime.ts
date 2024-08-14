@@ -1,102 +1,67 @@
-import { WakaTimeData } from "../types.ts";
+import { WakaTimeData, Language } from "../types.ts";
 import { getCountryEmoji } from "./emoji.ts";
+
 export class WakaTime {
-    private api_key: string
-    private leaderboard_id: string
-    public languages = new Map();
-    public topLangs = []
+    private readonly apiKey: string;
+    private readonly leaderboardId: string;
+    private languages = new Map<string, { time: number; humanReadable: string }>();
 
-    constructor(api_key: string, leaderboard_id: string ){
-        this.api_key = api_key
-        this.leaderboard_id = leaderboard_id
+    constructor(apiKey: string, leaderboardId: string) {
+        this.apiKey = apiKey;
+        this.leaderboardId = leaderboardId;
     }
 
-    async fetchData(): Promise<WakaTimeData[]> {
+    private async fetchData(): Promise<WakaTimeData[]> {
         const response = await fetch(
-            `https://wakatime.com/api/v1/users/current/leaderboards/${this.leaderboard_id}`,
+            `https://wakatime.com/api/v1/users/current/leaderboards/${this.leaderboardId}`,
             {
-              headers: {
-                "Authorization": `Basic ${btoa(this.api_key)}`,
-              },
+                headers: {
+                    "Authorization": `Basic ${btoa(this.apiKey)}`,
+                },
             },
-          );
-          
-          return (await response.json()).data;
+        );
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.data;
     }
 
-    async leaderBoard(): Promise<string> {
-        const response = await fetch(
-          `https://wakatime.com/api/v1/users/current/leaderboards/${this.leaderboard_id}`,
-          {
-            headers: {
-              "Authorization": `Basic ${btoa(this.api_key)}`,
-            },
-          },
-        );
-      
-        const datas: WakaTimeData[] = (await response.json()).data;
-        let result = "";
-        for (const data of datas) {
-          const name = data.user.full_name || data.user.username || "Unknown User";
-          const total = data.running_total.human_readable_total || "0 secs";
-      
-          const emoji = getCountryEmoji(data.user.city?.country_code);
-      
-          result = result + "\n" +
-            `${data.rank}. ${emoji} ${name} - ${total}`;
-        }
-      
-      
-      
-        return result;
-      };
-      
+    async getLeaderBoard(): Promise<string> {
+        const datas = await this.fetchData();
+        return datas.map(data => {
+            const name = data.user.full_name || data.user.username || "Unknown User";
+            const total = data.running_total.human_readable_total || "0 secs";
+            const emoji = getCountryEmoji(data.user.city?.country_code);
+            return `${data.rank}. ${emoji} ${name} - ${total}`;
+        }).join("\n");
+    }
 
-    async topLanguages(): Promise<{language: string, time: string, humanReadable: string}[]> {
+    async getTopLanguages(): Promise<{ language: string; time: number; humanReadable: string }[]> {
         const datas = await this.fetchData();
 
-        for(const data of datas){
-            
-            for(const language of data.running_total.languages) {
-                if(!this.languages.has(language.name)) {
-                    this.languages.set(language.name, {time: language.total_seconds, humanReadable: this.humanReadable(language.total_seconds)})
-                }
+        datas.forEach(data => {
+            data.running_total.languages.forEach((language: Language) => {
+                const current = this.languages.get(language.name) || { time: 0, humanReadable: '' };
+                const newTime = current.time + language.total_seconds;
+                this.languages.set(language.name, {
+                    time: newTime,
+                    humanReadable: this.humanReadable(newTime)
+                });
+            });
+        });
 
-                const oldLanguage = this.languages.get(language.name)
-                this.languages.set(language.name, {name: language.name,time: oldLanguage.time + language.total_seconds, humanReadable: this.humanReadable(oldLanguage.time + language.total_seconds)})
-            }
-
-        }
-
-        for(const time of this.languages.values()) {
-            // @ts-ignore xz
-            this.topLangs.push(time.time)
-        }
-
-        this.topLangs = this.topLangs.sort((a, b) => b - a).slice(0, 10)
-
-        const result = []
-
-        for(const time of this.languages.values()) {
-            // @ts-ignore xz
-            if(this.topLangs.includes(time.time)) {
-                result.push({language: time.name, time: time.time, humanReadable: this.humanReadable(time.time)})
-            }
-        }
-        return result
+        return Array.from(this.languages.entries())
+            .map(([language, { time, humanReadable }]) => ({ language, time, humanReadable }))
+            .sort((a, b) => b.time - a.time)
+            .slice(0, 10);
     }
 
-    /**
-     * Converts the given seconds to human readable hours and mins.
-     * @param time [number]
-     * @returns string 
-     */
-    humanReadable(time: number): string {
+    private humanReadable(time: number): string {
         const hours = Math.floor(time / 3600);
         const minutes = Math.floor((time % 3600) / 60);
-
         return `${hours} hrs ${minutes} mins`;
     }
-
 }
-
