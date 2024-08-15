@@ -1,7 +1,7 @@
 import { API_KEY, bot, LEADERBOARD_ID } from "../config/mod.ts";
 import { WakaTime } from "../utils/wakatime.ts";
 
-Deno.cron("daily statistic", "30 12 * * *", async () => {
+Deno.cron("daily statistic", "30 0 * * *", async () => {
     const wakatime = new WakaTime(API_KEY, LEADERBOARD_ID);
     let message = await wakatime.getLeaderBoard()
 
