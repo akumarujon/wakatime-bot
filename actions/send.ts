@@ -1,13 +1,11 @@
-import { API_KEY, bot, LEADERBOARD_ID } from "../config/mod.ts";
-import { WakaTime } from "../utils/wakatime.ts";
+import { bot } from "../config/bot.ts";
+import { kv } from "../utils/kv.ts";
+import { wakatime } from "../utils/wakatime.ts";
 
 Deno.cron("daily statistic", "30 0 * * *", async () => {
-    const wakatime = new WakaTime(API_KEY, LEADERBOARD_ID);
-    let message = await wakatime.getLeaderBoard()
+  const message = await wakatime.message();
 
-    message = message + `\n\n🏆 Top Languages 🏆`
-    for(const language of await wakatime.getTopLanguages()) {
-        message = message + `\n${language.language} - ${language.humanReadable}`
-    }
-    await bot.api.sendMessage(5560860031, message);
+  const users = await kv.get<string[]>(["users"]);
+
+  for (const user of users.value!) await bot.api.sendMessage(user, message);
 });
